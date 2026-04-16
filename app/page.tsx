@@ -2,15 +2,13 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
-  Baby,
   Brain,
   CalendarDays,
   ChevronRight,
   CirclePlay,
-  Eye,
   Heart,
   ShieldCheck,
-  Smile,
+  Sparkles,
 } from "lucide-react";
 
 const doctorAvatars = [
@@ -21,22 +19,28 @@ const doctorAvatars = [
 
 const departments = [
   {
-    title: "Ophthalmology",
+    title: "Cardiology",
     description:
-      "Comprehensive eye care from routine exams to advanced laser surgeries.",
-    icon: "eye",
+      "Advanced heart care with precision diagnostics and personalized treatment plans.",
+    icon: "heart",
   },
   {
-    title: "Pediatrics",
+    title: "Neurology",
     description:
-      "Gentle and specialized medical attention for infants, children, and adolescents.",
-    icon: "baby",
+      "Expert neurological consultation for complex disorders and brain health management.",
+    icon: "brain",
   },
   {
-    title: "Dental Care",
+    title: "Dermatology",
     description:
-      "State-of-the-art restorative and cosmetic dentistry for a perfect healthy smile.",
-    icon: "smile",
+      "Comprehensive skin care, diagnosis, and long-term treatment strategies.",
+    icon: "sparkles",
+  },
+  {
+    title: "Psychiatry",
+    description:
+      "Compassionate mental health care focused on sustainable, practical recovery plans.",
+    icon: "brain",
   },
 ];
 
@@ -60,9 +64,12 @@ export default function Home() {
             </a>
           </nav>
         </div>
-        <button className="rounded-lg bg-[#004f45] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#00695c]">
+        <Link
+          href="/doctor-login"
+          className="rounded-lg bg-[#004f45] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#00695c]"
+        >
           Sign In
-        </button>
+        </Link>
       </header>
 
       <main>
@@ -153,47 +160,25 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-4 lg:grid-cols-6">
-              <div className="rounded-2xl bg-white p-8 md:col-span-2 lg:col-span-3">
-                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-xl bg-[#c6e6de] text-[#2f4c46]">
-                  <Heart className="h-8 w-8" aria-hidden="true" />
-                </div>
-                <h3 className="mb-2 text-3xl font-bold">Cardiology</h3>
-                <p className="text-[#3e4946]">
-                  Advanced heart care services using the latest diagnostic
-                  technologies and personalized treatment plans.
-                </p>
-                <a href="#" className="mt-7 inline-flex items-center gap-2 font-bold text-[#004f45]">
-                  Explore Department
-                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                </a>
-              </div>
-
-              <div className="rounded-2xl bg-[#004f45] p-8 text-white md:col-span-2 lg:col-span-3">
-                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-xl bg-[#94e5d5] text-[#004f45]">
-                  <Brain className="h-8 w-8" aria-hidden="true" />
-                </div>
-                <h3 className="mb-2 text-3xl font-bold">Neurology</h3>
-                <p className="text-[#c6e6de]">
-                  Expert diagnosis and surgical treatments for complex neurological
-                  conditions and spine health.
-                </p>
-                <a href="#" className="mt-7 inline-flex items-center gap-2 font-bold text-white">
-                  Explore Department
-                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                </a>
-              </div>
-
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
               {departments.map((department) => (
-                <div key={department.title} className="rounded-2xl bg-white p-6 md:col-span-2 lg:col-span-2">
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[#e5e9e6] text-[#004f45]">
-                    {department.icon === "eye" && <Eye className="h-5 w-5" aria-hidden="true" />}
-                    {department.icon === "baby" && <Baby className="h-5 w-5" aria-hidden="true" />}
-                    {department.icon === "smile" && <Smile className="h-5 w-5" aria-hidden="true" />}
+                <Link
+                  key={department.title}
+                  href={`/find-doctor?specialty=${encodeURIComponent(department.title)}`}
+                  className="group rounded-2xl border border-[#dbe3e0] bg-white p-6 transition hover:-translate-y-1 hover:border-[#bfd4ce] hover:shadow-lg"
+                >
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[#e5efeb] text-[#004f45]">
+                    {department.icon === "heart" && <Heart className="h-5 w-5" aria-hidden="true" />}
+                    {department.icon === "brain" && <Brain className="h-5 w-5" aria-hidden="true" />}
+                    {department.icon === "sparkles" && <Sparkles className="h-5 w-5" aria-hidden="true" />}
                   </div>
                   <h3 className="mb-2 text-2xl font-bold">{department.title}</h3>
                   <p className="text-sm text-[#3e4946]">{department.description}</p>
-                </div>
+                  <span className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-[#004f45]">
+                    Explore Department
+                    <ChevronRight className="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden="true" />
+                  </span>
+                </Link>
               ))}
             </div>
           </div>
@@ -265,9 +250,12 @@ export default function Home() {
               )}
             </div>
 
-            <button className="rounded-xl bg-[#004f45] px-8 py-4 text-lg font-bold text-white transition hover:bg-[#00695c]">
+            <Link
+              href="/find-doctor"
+              className="inline-flex rounded-xl bg-[#004f45] px-8 py-4 text-lg font-bold text-white transition hover:bg-[#00695c]"
+            >
               Book Your First Consultation
-            </button>
+            </Link>
           </div>
         </section>
       </main>

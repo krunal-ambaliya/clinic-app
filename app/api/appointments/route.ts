@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getDoctorAvailabilityByDoctorName } from "@/lib/doctor-portal-db";
 import { getSql, isNeonConfigured } from "@/lib/neon";
 
 type AppointmentDraftPayload = {
@@ -71,6 +72,54 @@ function isDateInAllowedBookingWindow(dateIso: string) {
   const appointmentTime = normalizedAppointmentDate.getTime();
 
   return appointmentTime >= minTime && appointmentTime <= maxTime;
+}
+
+function getDayNameFromIso(dateIso: string) {
+  const parsed = parseDateIso(dateIso);
+
+  if (!parsed) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(parsed);
+}
+
+function time24ToMinutes(time: string) {
+  const [hourText, minuteText] = time.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return Number.NaN;
+  }
+
+  return hour * 60 + minute;
+}
+
+function minutesToSlotLabel(minutes: number) {
+  const hour24 = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${String(hour12).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${period}`;
+}
+
+function buildSlots(startTime: string, endTime: string, slotDuration: number) {
+  const startMinutes = time24ToMinutes(startTime);
+  const endMinutes = time24ToMinutes(endTime);
+
+  if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes) || endMinutes <= startMinutes) {
+    return [] as string[];
+  }
+
+  const duration = slotDuration === 15 ? 15 : 30;
+  const slots: string[] = [];
+
+  for (let current = startMinutes; current + duration <= endMinutes; current += duration) {
+    slots.push(minutesToSlotLabel(current));
+  }
+
+  return slots;
 }
 
 async function ensureAppointmentsTable() {
@@ -261,7 +310,13 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   if (!isNeonConfigured()) {
-    return NextResponse.json({ ok: true, bookedSlots: [] as string[] });
+    return NextResponse.json({
+      ok: true,
+      bookedSlots: [] as string[],
+      availableSlots: [] as string[],
+      enabledDayNames: [] as string[],
+      slotDuration: 30,
+    });
   }
 
   const { searchParams } = new URL(request.url);
@@ -270,14 +325,26 @@ export async function GET(request: Request) {
   const dateIso = searchParams.get("dateIso");
 
   if (!dateIso || !isDateInAllowedBookingWindow(dateIso)) {
-    return NextResponse.json({ ok: true, bookedSlots: [] as string[] });
+    return NextResponse.json({
+      ok: true,
+      bookedSlots: [] as string[],
+      availableSlots: [] as string[],
+      enabledDayNames: [] as string[],
+      slotDuration: 30,
+    });
   }
 
   const parsedDoctorId = Number(doctorIdParam);
   const hasDoctorId = Number.isFinite(parsedDoctorId);
 
   if (!hasDoctorId && !doctorName) {
-    return NextResponse.json({ ok: true, bookedSlots: [] as string[] });
+    return NextResponse.json({
+      ok: true,
+      bookedSlots: [] as string[],
+      availableSlots: [] as string[],
+      enabledDayNames: [] as string[],
+      slotDuration: 30,
+    });
   }
 
   await ensureAppointmentsTable();
@@ -297,9 +364,19 @@ export async function GET(request: Request) {
           AND appointment_date = ${dateIso};
       `) as Array<{ appointment_slot: string }>);
 
+  const availability = await getDoctorAvailabilityByDoctorName(doctorName ?? "");
+  const dayName = getDayNameFromIso(dateIso);
+  const daySchedule = availability.days.find((day) => day.dayName === dayName && day.enabled);
+  const availableSlots = daySchedule
+    ? buildSlots(daySchedule.start, daySchedule.end, availability.slotDuration)
+    : [];
+
   return NextResponse.json({
     ok: true,
     bookedSlots: rows.map((row) => row.appointment_slot),
+    availableSlots,
+    enabledDayNames: availability.days.filter((day) => day.enabled).map((day) => day.dayName),
+    slotDuration: availability.slotDuration,
     fetchedAt: new Date(Date.now() + DAY_MS * 0).toISOString(),
   });
 }

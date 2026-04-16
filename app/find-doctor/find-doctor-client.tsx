@@ -10,10 +10,11 @@ import { updateBookingDraft } from "@/lib/booking-cache";
 
 type FindDoctorClientProps = {
   doctors: Doctor[];
+  initialSpecialty?: string;
 };
 
-export function FindDoctorClient({ doctors }: FindDoctorClientProps) {
-  const [selectedSpecialty, setSelectedSpecialty] = useState("All");
+export function FindDoctorClient({ doctors, initialSpecialty = "All" }: FindDoctorClientProps) {
+  const [selectedSpecialty, setSelectedSpecialty] = useState(initialSpecialty);
   const [minExperience, setMinExperience] = useState(0);
   const [priceOrder, setPriceOrder] = useState<"high-to-low" | "low-to-high">("high-to-low");
 
@@ -21,12 +22,15 @@ export function FindDoctorClient({ doctors }: FindDoctorClientProps) {
     const uniqueSpecialties = Array.from(new Set(doctors.map((doctor) => doctor.specialty)));
     return ["All", ...uniqueSpecialties];
   }, [doctors]);
+  const effectiveSelectedSpecialty = specialties.includes(selectedSpecialty)
+    ? selectedSpecialty
+    : "All";
 
   const filteredDoctors = useMemo(() => {
     let result = doctors;
 
-    if (selectedSpecialty !== "All") {
-      result = result.filter((doctor) => doctor.specialty === selectedSpecialty);
+    if (effectiveSelectedSpecialty !== "All") {
+      result = result.filter((doctor) => doctor.specialty === effectiveSelectedSpecialty);
     }
 
     if (minExperience > 0) {
@@ -42,7 +46,7 @@ export function FindDoctorClient({ doctors }: FindDoctorClientProps) {
     });
 
     return sorted;
-  }, [doctors, selectedSpecialty, minExperience, priceOrder]);
+  }, [doctors, effectiveSelectedSpecialty, minExperience, priceOrder]);
 
   const gridColsClass = filteredDoctors.length <= 1 ? "md:grid-cols-1" : "md:grid-cols-2";
 
@@ -73,7 +77,7 @@ export function FindDoctorClient({ doctors }: FindDoctorClientProps) {
                   type="button"
                   onClick={() => setSelectedSpecialty(specialty)}
                   className={`rounded-full px-4 py-2 text-left ${
-                    selectedSpecialty === specialty
+                    effectiveSelectedSpecialty === specialty
                       ? "bg-[#005e52] text-white"
                       : "bg-white text-[#2d4641]"
                   }`}
@@ -147,13 +151,24 @@ export function FindDoctorClient({ doctors }: FindDoctorClientProps) {
         {filteredDoctors.map((doctor) => (
           <article key={doctor.id} className="rounded-2xl border border-[#d7dfdc] bg-[#f7faf8] p-5">
             <div className="mb-4 flex items-start justify-between gap-3">
-              <Image
-                src={doctor.photoUrl}
-                alt={doctor.fullName}
-                width={56}
-                height={56}
-                className="h-14 w-14 rounded-xl object-cover"
-              />
+              {doctor.photoUrl.trim() ? (
+                <Image
+                  src={doctor.photoUrl}
+                  alt={doctor.fullName}
+                  width={56}
+                  height={56}
+                  className="h-14 w-14 rounded-xl object-cover"
+                />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#d8e8e2] text-sm font-bold text-[#2f5e56]">
+                  {doctor.fullName
+                    .split(" ")
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((part) => part[0]?.toUpperCase() ?? "")
+                    .join("") || "DR"}
+                </div>
+              )}
               <span className="rounded-md bg-[#d8ebe4] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-[#325d56]">
                 {doctor.availabilityTag}
               </span>

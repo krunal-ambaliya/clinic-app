@@ -39,9 +39,9 @@ export default async function FindDoctorPage({ searchParams }: FindDoctorPagePro
             <span>Search conditions...</span>
           </div>
 
-          <button className="rounded-full bg-[#005e52] px-5 py-2 text-sm font-semibold text-white">
+          <Link href="/doctor-login" className="rounded-full bg-[#005e52] px-5 py-2 text-sm font-semibold text-white">
             Sign In
-          </button>
+          </Link>
         </div>
       </header>
 

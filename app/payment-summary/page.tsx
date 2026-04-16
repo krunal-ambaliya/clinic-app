@@ -131,7 +131,9 @@ export default function PaymentSummaryPage() {
             <span>Search doctors...</span>
           </div>
 
-          <button className="rounded-full bg-[#005e52] px-5 py-2 text-sm font-semibold text-white">Sign In</button>
+          <Link href="/doctor-login" className="rounded-full bg-[#005e52] px-5 py-2 text-sm font-semibold text-white">
+            Sign In
+          </Link>
         </div>
       </header>
 

@@ -16,7 +16,6 @@ import {
 } from "@/lib/booking-cache";
 
 const progressSteps = ["Find Doctor", "Schedule", "Patient", "Payment"];
-const availableSlots = ["09:00 AM", "09:45 AM", "10:30 AM", "11:15 AM", "01:00 PM", "02:30 PM"];
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -49,6 +48,12 @@ function toDateLabel(dateIso: string) {
 
 function isDateWithinRange(dateIso: string, minIso: string, maxIso: string) {
   return dateIso >= minIso && dateIso <= maxIso;
+}
+
+function getDayNameFromIso(dateIso: string) {
+  const [year, month, day] = dateIso.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(date);
 }
 
 function slotLabelToMinutes(slot: string) {
@@ -90,6 +95,14 @@ export function DoctorBookingClient({ doctor }: DoctorBookingClientProps) {
   });
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [enabledDayNames, setEnabledDayNames] = useState<string[]>([
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+  ]);
   const [availabilityMessage, setAvailabilityMessage] = useState("");
   const [enableStepNavigation, setEnableStepNavigation] = useState(false);
   const selectedDateLabel = useMemo(() => toDateLabel(selectedDateIso), [selectedDateIso]);
@@ -211,18 +224,34 @@ export function DoctorBookingClient({ doctor }: DoctorBookingClientProps) {
           return;
         }
 
-        const result = (await response.json()) as { bookedSlots?: string[] };
+        const result = (await response.json()) as {
+          bookedSlots?: string[];
+          availableSlots?: string[];
+          enabledDayNames?: string[];
+        };
         const reserved = result.bookedSlots ?? [];
+        const slots = result.availableSlots ?? [];
+        const dayNames = result.enabledDayNames ?? [];
 
         if (cancelled) {
           return;
         }
 
         setBookedSlots(reserved);
+        setAvailableSlots(slots);
+
+        if (dayNames.length > 0) {
+          setEnabledDayNames(dayNames);
+        }
+
+        if (selectedSlot && (!slots.includes(selectedSlot) || reserved.includes(selectedSlot))) {
+          setSelectedSlot(null);
+        }
 
       } catch {
         if (!cancelled) {
           setBookedSlots([]);
+          setAvailableSlots([]);
           setAvailabilityMessage("Unable to refresh slot availability right now.");
         }
       }
@@ -233,7 +262,7 @@ export function DoctorBookingClient({ doctor }: DoctorBookingClientProps) {
     return () => {
       cancelled = true;
     };
-  }, [doctor.fullName, doctor.id, selectedDateIso]);
+  }, [doctor.fullName, doctor.id, selectedDateIso, selectedSlot]);
 
   const stepLinks = useMemo(() => {
     return ["/find-doctor", `/doctor/${doctor.id}`, "/patient-details", "/payment-summary"];
@@ -310,9 +339,9 @@ export function DoctorBookingClient({ doctor }: DoctorBookingClientProps) {
             <span>Search doctors...</span>
           </div>
 
-          <button className="rounded-full bg-[#005e52] px-5 py-2 text-sm font-semibold text-white">
+          <Link href="/doctor-login" className="rounded-full bg-[#005e52] px-5 py-2 text-sm font-semibold text-white">
             Sign In
-          </button>
+          </Link>
         </div>
       </header>
 
@@ -436,7 +465,9 @@ export function DoctorBookingClient({ doctor }: DoctorBookingClientProps) {
                       return <div key={cell.key} className="h-9" />;
                     }
 
-                    const isUnavailableDate = !isDateWithinRange(cell.dateIso, todayIso, maxBookDateIso);
+                    const isUnavailableDate =
+                      !isDateWithinRange(cell.dateIso, todayIso, maxBookDateIso) ||
+                      !enabledDayNames.includes(getDayNameFromIso(cell.dateIso));
                     const isSelectedDate = selectedDateIso === cell.dateIso;
 
                     return (
@@ -479,28 +510,33 @@ export function DoctorBookingClient({ doctor }: DoctorBookingClientProps) {
               <div>
                 <div className="grid grid-cols-3 gap-2">
                   {availableSlots.map((slot) => (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => {
-                        setAvailabilityMessage("");
-                        setSelectedSlot(slot);
-                      }}
-                      disabled={isSlotDisabled(slot)}
-                      className={`rounded-md px-3 py-2 text-xs font-semibold ${
-                        isSlotDisabled(slot)
-                          ? "cursor-not-allowed bg-[#d2d9d6] text-[#6f807c]"
-                          : ""
-                      } ${
-                        slot === selectedSlot ? "bg-[#005e52] text-white" : "bg-white text-[#304844]"
-                      }`}
-                    >
-                      {bookedSlots.includes(slot)
-                        ? `${slot} (Booked)`
-                        : selectedDateIso === todayIso && slotLabelToMinutes(slot) <= nowMinutes
-                          ? `${slot}`
-                          : slot}
-                    </button>
+                    (() => {
+                      const isBookedSlot = bookedSlots.includes(slot);
+                      const isPassedSlot = selectedDateIso === todayIso && slotLabelToMinutes(slot) <= nowMinutes;
+                      const disabled = isBookedSlot || isPassedSlot;
+                      const isSelected = slot === selectedSlot;
+
+                      return (
+                        <button
+                          key={slot}
+                          type="button"
+                          onClick={() => {
+                            setAvailabilityMessage("");
+                            setSelectedSlot(slot);
+                          }}
+                          disabled={disabled}
+                          className={`rounded-md px-3 py-2 text-xs font-semibold ${
+                            disabled
+                              ? "cursor-not-allowed bg-[#7f1d1d] text-[#fee2e2]"
+                              : isSelected
+                                ? "bg-[#005e52] text-white"
+                                : "bg-white text-[#304844] hover:bg-[#e8efec]"
+                          }`}
+                        >
+                          {isBookedSlot ? `${slot} (Booked)` : isPassedSlot ? `${slot} (Passed)` : slot}
+                        </button>
+                      );
+                    })()
                   ))}
                 </div>
 
@@ -548,13 +584,17 @@ export function DoctorBookingClient({ doctor }: DoctorBookingClientProps) {
           <article className="overflow-hidden rounded-2xl bg-[#005e52] p-4 text-[#d3ebe4]">
             <h3 className="text-2xl font-bold text-white">Location</h3>
             <p className="mt-1 text-sm">{doctor.locationName}</p>
-            <div className="relative mt-4 h-28 overflow-hidden rounded-xl bg-[#93bdb2]">
-              <Image
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAiG-eCh7m4o8fdE6lKnK50ChdwiqmTGpEIhv3GMtReKyy8leEBg9REVBwVNtlmOPI7nugfT1SrTXGrFhLtXmSSLXAHt2MfUS46bpQg7ccujp_YopkMBqNMHivdQpc8qRO-90MKle3-X8mZoGYjWXYSb64h5b-7oraok9hMl7fGMQszEQVNwvJeLZlfHXJYGxU2GmGDZLY9IY30lLmV9OeXnRhutSozm103mZ_alFabHYoz0uMRygiUf1kRIh_B2Jsv5nTxTmd5hYVQ"
-                alt="Map location preview"
-                fill
-                sizes="(min-width: 1024px) 24vw, 100vw"
-                className="object-cover opacity-35"
+            <div className="mt-4 overflow-hidden rounded-xl border border-[#2e6f63]">
+              <iframe
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d4267.943908839194!2d70.79118622063032!3d22.26474725763893!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3959ca65b32d416f%3A0x18425f4af71b51fa!2sH.%20J.%20Doshi%20Hospital!5e1!3m2!1sen!2sin!4v1776337260906!5m2!1sen!2sin"
+                width="600"
+                height="450"
+                style={{ border: 0 }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                title="Hospital Location"
+                className="h-56 w-full"
               />
             </div>
           </article>
