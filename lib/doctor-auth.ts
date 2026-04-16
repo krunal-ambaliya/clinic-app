@@ -1,7 +1,9 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 
 import type { NextRequest } from "next/server";
 
+import { invalidateDoctorCache } from "@/lib/doctor-cache";
 import { getSql, isNeonConfigured } from "@/lib/neon";
 
 export const DOCTOR_SESSION_COOKIE = "doctor_portal_session";
@@ -68,23 +70,25 @@ export type UpdateDoctorAdminInput = {
 let authTablesReadyPromise: Promise<void> | null = null;
 let authTablesReady = false;
 
+const scryptAsync = promisify(scrypt);
+
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
-function hashPassword(password: string) {
+async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
+  const hash = (await scryptAsync(password, salt, 64) as Buffer).toString("hex");
   return `${salt}:${hash}`;
 }
 
-function verifyPassword(password: string, encoded: string) {
+async function verifyPassword(password: string, encoded: string) {
   const [salt, hashHex] = encoded.split(":");
   if (!salt || !hashHex) {
     return false;
   }
 
-  const incoming = scryptSync(password, salt, 64);
+  const incoming = (await scryptAsync(password, salt, 64)) as Buffer;
   const existing = Buffer.from(hashHex, "hex");
 
   if (incoming.length !== existing.length) {
@@ -218,7 +222,13 @@ export async function ensureDoctorAuthTables() {
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       specialty TEXT NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Kolkata')
+      profession TEXT,
+      experience_years INTEGER,
+      photo_url TEXT,
+      bio TEXT,
+      doctor_profile_id INTEGER,
+      created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Kolkata'),
+      updated_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Kolkata')
     );
   `
     .then(async () => {
@@ -256,73 +266,17 @@ export async function ensureDoctorAuthTables() {
 
       await sql`
         ALTER TABLE doctor_users
-        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Kolkata');
-      `;
-
-      await sql`
-        ALTER TABLE doctor_users
         ADD COLUMN IF NOT EXISTS doctor_profile_id INTEGER;
       `;
 
       await sql`
-        UPDATE doctor_users
-        SET
-          profession = COALESCE(profession, specialty),
-          experience_years = COALESCE(experience_years, 0),
-          photo_url = COALESCE(photo_url, ''),
-          bio = COALESCE(bio, '')
-        WHERE profession IS NULL
-           OR experience_years IS NULL
-           OR photo_url IS NULL
-           OR bio IS NULL;
+        ALTER TABLE doctor_users
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Kolkata');
       `;
 
       await sql`
-        INSERT INTO doctors (
-          full_name,
-          role_title,
-          specialty,
-          experience_years,
-          consultation_fee,
-          photo_url,
-          availability_tag,
-          location_name,
-          bio,
-          languages,
-          board_certified,
-          email
-        )
-        SELECT
-          u.full_name,
-          COALESCE(NULLIF(u.profession, ''), u.specialty),
-          u.specialty,
-          COALESCE(u.experience_years, 0),
-          250,
-          COALESCE(u.photo_url, ''),
-          'AVAILABLE TODAY',
-          'Central Atelier Medical, Medical District',
-          COALESCE(u.bio, ''),
-          'EN',
-          true,
-          u.email
-        FROM doctor_users u
-        WHERE u.doctor_profile_id IS NULL
-        ON CONFLICT (email)
-        DO UPDATE SET
-          full_name = EXCLUDED.full_name,
-          role_title = EXCLUDED.role_title,
-          specialty = EXCLUDED.specialty,
-          experience_years = EXCLUDED.experience_years,
-          photo_url = EXCLUDED.photo_url,
-          bio = EXCLUDED.bio;
-      `;
-
-      await sql`
-        UPDATE doctor_users u
-        SET doctor_profile_id = d.id
-        FROM doctors d
-        WHERE u.doctor_profile_id IS NULL
-          AND d.email = u.email;
+        CREATE INDEX IF NOT EXISTS doctor_portal_sessions_token_hash_idx
+        ON doctor_portal_sessions (token_hash);
       `;
 
       authTablesReady = true;
@@ -353,7 +307,7 @@ export async function loginDoctor(email: string, password: string) {
 
   const user = rows[0];
 
-  if (!user || !verifyPassword(password, user.password_hash)) {
+  if (!user || !(await verifyPassword(password, user.password_hash))) {
     return { ok: false as const, reason: "INVALID_CREDENTIALS" };
   }
 
@@ -445,6 +399,8 @@ export async function createDoctorAccount(input: CreateDoctorAdminInput): Promis
   await ensureDoctorAuthTables();
   const sql = getSql();
 
+  const passwordHash = await hashPassword(input.password);
+
   const rows = (await sql`
     INSERT INTO doctor_users (
       full_name,
@@ -460,7 +416,7 @@ export async function createDoctorAccount(input: CreateDoctorAdminInput): Promis
     VALUES (
       ${input.fullName.trim()},
       ${normalizeEmail(input.email)},
-      ${hashPassword(input.password)},
+      ${passwordHash},
       ${input.specialty.trim()},
       ${input.profession.trim()},
       ${Math.max(0, Math.trunc(input.experienceYears))},
@@ -482,6 +438,8 @@ export async function createDoctorAccount(input: CreateDoctorAdminInput): Promis
     `;
   }
 
+  invalidateDoctorCache();
+
   return toAdminUser(inserted);
 }
 
@@ -498,12 +456,14 @@ export async function updateDoctorAccount(id: number, input: UpdateDoctorAdminIn
   const normalizedExperience = Math.max(0, Math.trunc(input.experienceYears));
 
   if (input.password && input.password.trim().length > 0) {
+    const passwordHash = await hashPassword(input.password);
+
     rows = (await sql`
       UPDATE doctor_users
       SET
         full_name = ${input.fullName.trim()},
         email = ${normalizedEmail},
-        password_hash = ${hashPassword(input.password)},
+        password_hash = ${passwordHash},
         specialty = ${input.specialty.trim()},
         profession = ${input.profession.trim()},
         experience_years = ${normalizedExperience},
@@ -545,6 +505,8 @@ export async function updateDoctorAccount(id: number, input: UpdateDoctorAdminIn
     `;
   }
 
+  invalidateDoctorCache();
+
   return toAdminUser(updated);
 }
 
@@ -576,6 +538,10 @@ export async function deleteDoctorAccount(id: number): Promise<boolean> {
       DELETE FROM doctors
       WHERE id = ${profileId};
     `;
+  }
+
+  if (rows.length > 0) {
+    invalidateDoctorCache();
   }
 
   return rows.length > 0;

@@ -1,4 +1,10 @@
 import { getSql, isNeonConfigured } from "@/lib/neon";
+import {
+  getCachedDoctorById,
+  getCachedDoctorsBySpecialty,
+  setCachedDoctorById,
+  setCachedDoctorsBySpecialty,
+} from "@/lib/doctor-cache";
 
 type DbError = {
   code?: string;
@@ -136,6 +142,12 @@ export async function listDoctors(specialty?: string): Promise<Doctor[]> {
     return [];
   }
 
+  const cachedDoctors = getCachedDoctorsBySpecialty(specialty);
+
+  if (cachedDoctors) {
+    return cachedDoctors;
+  }
+
   try {
     await ensureDoctorsTable();
     const sql = getSql();
@@ -159,7 +171,10 @@ export async function listDoctors(specialty?: string): Promise<Doctor[]> {
       ORDER BY id;
     `) as Array<Record<string, unknown>>;
 
-    return dedupeDoctors(rows.map((row) => mapDoctorRow(row)));
+    const doctors = dedupeDoctors(rows.map((row) => mapDoctorRow(row)));
+    setCachedDoctorsBySpecialty(doctors, specialty);
+
+    return doctors;
   } catch (error) {
     if (isRecoverableConnectionError(error)) {
       return [];
@@ -172,6 +187,12 @@ export async function listDoctors(specialty?: string): Promise<Doctor[]> {
 export async function getDoctorById(id: string): Promise<Doctor | null> {
   if (!isNeonConfigured()) {
     return null;
+  }
+
+  const cachedDoctor = getCachedDoctorById(id);
+
+  if (cachedDoctor !== undefined) {
+    return cachedDoctor;
   }
 
   try {
@@ -198,10 +219,14 @@ export async function getDoctorById(id: string): Promise<Doctor | null> {
     `) as Array<Record<string, unknown>>;
 
     if (rows.length === 0) {
+      setCachedDoctorById(id, null);
       return null;
     }
 
-    return mapDoctorRow(rows[0]);
+    const doctor = mapDoctorRow(rows[0]);
+    setCachedDoctorById(id, doctor);
+
+    return doctor;
   } catch (error) {
     if (isRecoverableConnectionError(error)) {
       return null;
