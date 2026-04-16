@@ -158,6 +158,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Schedule is missing." }, { status: 400 });
   }
 
+  const normalizedPhoneNumber = (draft.patient.phoneNumber ?? "").replace(/\D/g, "").slice(0, 10);
+
+  if (!/^\d{10}$/.test(normalizedPhoneNumber)) {
+    return NextResponse.json({ error: "Phone number must be a valid 10-digit number." }, { status: 400 });
+  }
+
   const appointmentDate = draft.schedule.dateIso ?? draft.schedule.dateLabel ?? "";
 
   if (!isDateInAllowedBookingWindow(appointmentDate)) {
@@ -197,7 +203,7 @@ export async function POST(request: Request) {
       ${doctorId},
       ${draft.doctor.fullName},
       ${draft.patient.fullName},
-      ${draft.patient.phoneNumber},
+      ${normalizedPhoneNumber},
       ${appointmentDate},
       ${draft.schedule.slot},
       ${draft.doctor.consultationFee ?? 0},
@@ -230,7 +236,7 @@ export async function POST(request: Request) {
 
   const existing = existingRows[0];
 
-  if (existing && existing.patient_phone === draft.patient.phoneNumber) {
+  if (existing && existing.patient_phone === normalizedPhoneNumber) {
     return NextResponse.json(
       {
         ok: false,

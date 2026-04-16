@@ -7,7 +7,13 @@ import { FindDoctorClient } from "@/app/find-doctor/find-doctor-client";
 
 const progressSteps = ["Find Doctor", "Schedule", "Patient", "Payment"];
 
-export default async function FindDoctorPage() {
+type FindDoctorPageProps = {
+  searchParams?: Promise<{ specialty?: string }>;
+};
+
+export default async function FindDoctorPage({ searchParams }: FindDoctorPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const initialSpecialty = resolvedSearchParams?.specialty ?? "All";
   const doctors = await listDoctors();
 
   return (
@@ -64,7 +70,7 @@ export default async function FindDoctorPage() {
           </p>
         </section>
 
-        <FindDoctorClient doctors={doctors} />
+        <FindDoctorClient doctors={doctors} initialSpecialty={initialSpecialty} />
       </main>
 
       <footer className="border-t border-[#d8e0dd] bg-[#e6efeb]">

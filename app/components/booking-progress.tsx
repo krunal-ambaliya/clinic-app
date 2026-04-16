@@ -23,6 +23,13 @@ export function BookingProgress({
   className,
 }: BookingProgressProps) {
   const [animatedStep, setAnimatedStep] = useState(1);
+  const trackInsetPercentage = useMemo(() => {
+    if (steps.length <= 1) {
+      return 0;
+    }
+
+    return 50 / steps.length;
+  }, [steps.length]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -44,13 +51,23 @@ export function BookingProgress({
       className={`rounded-[2rem] border border-[#cfd7d3] bg-[#f3f5f4] p-4 shadow-sm ${className ?? ""}`}
     >
       <div className="relative">
-        <div className="absolute left-0 right-0 top-3 h-[2px] bg-[#c8cfcc]" />
         <div
-          className="absolute left-0 top-3 h-[2px] bg-[#00695c] transition-all duration-700 ease-out"
-          style={{ width: `${progressPercentage}%` }}
-        />
+          className="absolute top-3 h-[2px] bg-[#c8cfcc]"
+          style={{
+            left: `${trackInsetPercentage}%`,
+            right: `${trackInsetPercentage}%`,
+          }}
+        >
+          <div
+            className="h-full bg-[#00695c] transition-all duration-700 ease-out"
+            style={{ width: `${progressPercentage}%` }}
+          />
+        </div>
 
-        <div className="relative grid grid-cols-4 gap-2">
+        <div
+          className="relative grid gap-2"
+          style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+        >
           {steps.map((step, index) => {
             const stepNumber = index + 1;
             const isComplete = stepNumber <= animatedStep;

@@ -15,6 +15,10 @@ import {
 
 const progressSteps = ["Find Doctor", "Schedule", "Patient", "Payment"];
 
+function sanitizePhoneNumber(value: string) {
+  return value.replace(/\D/g, "").slice(0, 10);
+}
+
 export default function PatientDetailsPage() {
   const router = useRouter();
   const [doctorId, setDoctorId] = useState<string | null>(null);
@@ -41,7 +45,7 @@ export default function PatientDetailsPage() {
       setDoctorId(draft.doctor.id);
       setFormState({
         fullName: draft.patient?.fullName ?? "",
-        phoneNumber: draft.patient?.phoneNumber ?? "",
+        phoneNumber: sanitizePhoneNumber(draft.patient?.phoneNumber ?? ""),
         symptoms: draft.patient?.symptoms ?? "",
         notes: draft.patient?.notes ?? "",
       });
@@ -52,8 +56,9 @@ export default function PatientDetailsPage() {
     };
   }, [router]);
 
-  const canContinue =
-    formState.fullName.trim().length > 1 && formState.phoneNumber.trim().length > 7;
+  const isNameValid = formState.fullName.trim().length > 1;
+  const isPhoneValid = /^\d{10}$/.test(formState.phoneNumber);
+  const canContinue = isNameValid && isPhoneValid;
 
   const stepLinks = useMemo(() => {
     return [
@@ -72,7 +77,7 @@ export default function PatientDetailsPage() {
     updateBookingDraft({
       patient: {
         fullName: formState.fullName.trim(),
-        phoneNumber: formState.phoneNumber.trim(),
+        phoneNumber: formState.phoneNumber,
         symptoms: formState.symptoms.trim(),
         notes: formState.notes.trim(),
       },
@@ -143,16 +148,23 @@ export default function PatientDetailsPage() {
             <label className="text-sm font-semibold text-[#23423d]">
               Phone Number
               <input
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={10}
                 value={formState.phoneNumber}
                 onChange={(event) =>
                   setFormState((previous) => ({
                     ...previous,
-                    phoneNumber: event.target.value,
+                    phoneNumber: sanitizePhoneNumber(event.target.value),
                   }))
                 }
                 className="mt-2 w-full rounded-xl bg-[#dde4e1] px-4 py-3 outline-none ring-[#005e52] focus:ring-2"
-                placeholder="+1 (555) 000-0000"
+                placeholder="9876543210"
               />
+              {formState.phoneNumber.length > 0 && !isPhoneValid ? (
+                <p className="mt-2 text-xs text-[#9a3b3b]">Enter a valid 10-digit mobile number.</p>
+              ) : null}
             </label>
           </div>
 
