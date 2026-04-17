@@ -59,9 +59,6 @@ export default function Home() {
             >
               Find Doctors
             </a>
-            <a href="#" className="text-sm text-[#4b6862] hover:text-[#046b5e]">
-              Emergency Care
-            </a>
           </nav>
         </div>
         <Link
@@ -280,7 +277,7 @@ export default function Home() {
               Legal Notice
             </a>
           </div>
-          <p className="text-[#35514b]">© 2024 Clinic Atelier. All rights reserved.</p>
+        
         </div>
       </footer>
     </div>

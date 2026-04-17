@@ -189,7 +189,13 @@ export async function getDoctorById(id: string): Promise<Doctor | null> {
     return null;
   }
 
-  const cachedDoctor = getCachedDoctorById(id);
+  const normalizedId = id.trim();
+
+  if (!normalizedId) {
+    return null;
+  }
+
+  const cachedDoctor = getCachedDoctorById(normalizedId);
 
   if (cachedDoctor !== undefined) {
     return cachedDoctor;
@@ -214,17 +220,17 @@ export async function getDoctorById(id: string): Promise<Doctor | null> {
         languages,
         board_certified
       FROM doctors
-      WHERE id = ${Number(id)}
+      WHERE id::text = ${normalizedId}
       LIMIT 1;
     `) as Array<Record<string, unknown>>;
 
     if (rows.length === 0) {
-      setCachedDoctorById(id, null);
+      setCachedDoctorById(normalizedId, null);
       return null;
     }
 
     const doctor = mapDoctorRow(rows[0]);
-    setCachedDoctorById(id, doctor);
+    setCachedDoctorById(normalizedId, doctor);
 
     return doctor;
   } catch (error) {

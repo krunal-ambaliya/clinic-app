@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, LifeBuoy, Search, ShieldCheck } from "lucide-react";
+import { ArrowLeft, LifeBuoy, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { BookingProgress } from "@/app/components/booking-progress";
+import { DoctorSearchInput } from "@/app/components/doctor-search-input";
 import {
   getBookingDraft,
   hasUnlockedProgressNavigation,
@@ -98,16 +99,10 @@ export default function PatientDetailsPage() {
               <Link href="/find-doctor" className="border-b-2 border-[#0f6157] pb-1 font-semibold text-[#0f3e38]">
                 Find Doctors
               </Link>
-              <a href="#" className="text-[#4f6460] hover:text-[#0f6157]">
-                Emergency Care
-              </a>
             </nav>
           </div>
 
-          <div className="hidden w-[320px] items-center rounded-full bg-white/85 px-4 py-2 text-sm text-[#607370] md:flex">
-            <Search className="mr-2 h-4 w-4" aria-hidden="true" />
-            <span>Search conditions...</span>
-          </div>
+          <DoctorSearchInput />
 
           <Link href="/doctor-login" className="rounded-full bg-[#005e52] px-5 py-2 text-sm font-semibold text-white">
             Sign In

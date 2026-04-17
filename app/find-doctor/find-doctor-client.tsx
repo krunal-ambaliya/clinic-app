@@ -11,9 +11,14 @@ import { updateBookingDraft } from "@/lib/booking-cache";
 type FindDoctorClientProps = {
   doctors: Doctor[];
   initialSpecialty?: string;
+  initialQuery?: string;
 };
 
-export function FindDoctorClient({ doctors, initialSpecialty = "All" }: FindDoctorClientProps) {
+export function FindDoctorClient({
+  doctors,
+  initialSpecialty = "All",
+  initialQuery = "",
+}: FindDoctorClientProps) {
   const [selectedSpecialty, setSelectedSpecialty] = useState(initialSpecialty);
   const [minExperience, setMinExperience] = useState(0);
   const [priceOrder, setPriceOrder] = useState<"high-to-low" | "low-to-high">("high-to-low");
@@ -28,6 +33,16 @@ export function FindDoctorClient({ doctors, initialSpecialty = "All" }: FindDoct
 
   const filteredDoctors = useMemo(() => {
     let result = doctors;
+    const normalizedQuery = initialQuery.trim().toLowerCase();
+
+    if (normalizedQuery) {
+      result = result.filter((doctor) => {
+        return [doctor.fullName, doctor.roleTitle, doctor.specialty, doctor.locationName]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery);
+      });
+    }
 
     if (effectiveSelectedSpecialty !== "All") {
       result = result.filter((doctor) => doctor.specialty === effectiveSelectedSpecialty);
@@ -46,7 +61,7 @@ export function FindDoctorClient({ doctors, initialSpecialty = "All" }: FindDoct
     });
 
     return sorted;
-  }, [doctors, effectiveSelectedSpecialty, minExperience, priceOrder]);
+  }, [doctors, effectiveSelectedSpecialty, minExperience, priceOrder, initialQuery]);
 
   const gridColsClass = filteredDoctors.length <= 1 ? "md:grid-cols-1" : "md:grid-cols-2";
 
