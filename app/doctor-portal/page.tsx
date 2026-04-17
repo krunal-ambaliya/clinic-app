@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowRight, CalendarClock, Clock3, Plus } from "lucide-react";
 
 import { DOCTOR_SESSION_COOKIE, getDoctorUserByToken } from "@/lib/doctor-auth";
-import { formatPrettyDate, listDoctorAppointmentsByName } from "@/lib/doctor-portal-db";
+import { formatPrettyDate, getDoctorDashboardSnapshot } from "@/lib/doctor-portal-db";
 
 export default async function DoctorPortalDashboardPage() {
   const cookieStore = await cookies();
@@ -14,15 +14,7 @@ export default async function DoctorPortalDashboardPage() {
     return null;
   }
 
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const doctorAppointments = await listDoctorAppointmentsByName(doctor.fullName);
-  const todayAppointments = doctorAppointments
-    .filter((appointment) => appointment.dateIso === todayIso && appointment.status === "confirmed")
-    .sort((a, b) => a.time.localeCompare(b.time));
-
-  const upcomingAppointments = doctorAppointments
-    .filter((appointment) => appointment.dateIso > todayIso && appointment.status !== "cancelled")
-    .slice(0, 4);
+  const { todayAppointments, upcomingAppointments } = await getDoctorDashboardSnapshot(doctor.fullName);
 
   const nextPatient = todayAppointments[0];
 

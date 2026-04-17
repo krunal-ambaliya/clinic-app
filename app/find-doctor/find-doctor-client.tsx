@@ -63,6 +63,10 @@ export function FindDoctorClient({
     return sorted;
   }, [doctors, effectiveSelectedSpecialty, minExperience, priceOrder, initialQuery]);
 
+  const animationKey = useMemo(() => {
+    return `${effectiveSelectedSpecialty}-${minExperience}-${priceOrder}-${initialQuery.trim().toLowerCase()}`;
+  }, [effectiveSelectedSpecialty, minExperience, priceOrder, initialQuery]);
+
   const gridColsClass = filteredDoctors.length <= 1 ? "md:grid-cols-1" : "md:grid-cols-2";
 
   const experienceOptions = [
@@ -155,7 +159,7 @@ export function FindDoctorClient({
 
       <div className={`grid grid-cols-1 items-start gap-5 ${gridColsClass}`}>
         {filteredDoctors.length === 0 ? (
-          <article className="rounded-2xl border border-[#d7dfdc] bg-[#f7faf8] p-6">
+          <article key={`empty-${animationKey}`} className="doctor-empty-animate rounded-2xl border border-[#d7dfdc] bg-[#f7faf8] p-6">
             <h2 className="text-2xl font-bold text-[#183431]">No doctors found</h2>
             <p className="mt-2 text-[#49625d]">
               Try changing specialization, experience, or price filters.
@@ -163,8 +167,12 @@ export function FindDoctorClient({
           </article>
         ) : null}
 
-        {filteredDoctors.map((doctor) => (
-          <article key={doctor.id} className="rounded-2xl border border-[#d7dfdc] bg-[#f7faf8] p-5">
+        {filteredDoctors.map((doctor, index) => (
+          <article
+            key={`${doctor.id}-${animationKey}`}
+            className="doctor-card-animate rounded-2xl border border-[#d7dfdc] bg-[#f7faf8] p-5"
+            style={{ "--doctor-card-delay": `${Math.min(index, 7) * 55}ms` } as React.CSSProperties}
+          >
             <div className="mb-4 flex items-start justify-between gap-3">
               {doctor.photoUrl.trim() ? (
                 <Image

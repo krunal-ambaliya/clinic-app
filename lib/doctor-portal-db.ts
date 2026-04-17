@@ -24,6 +24,21 @@ export type DoctorAvailabilitySnapshot = {
   days: DoctorAvailabilityRow[];
 };
 
+export type DoctorAppointmentFilter = "today" | "upcoming" | "completed" | "all";
+
+export type DoctorAppointmentsPageResult = {
+  appointments: DoctorPortalAppointment[];
+  totalCount: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+};
+
+export type DoctorDashboardSnapshot = {
+  todayAppointments: DoctorPortalAppointment[];
+  upcomingAppointments: DoctorPortalAppointment[];
+};
+
 const defaultAvailability: DoctorAvailabilityRow[] = [
   { dayName: "Monday", enabled: true, start: "09:00", end: "13:00" },
   { dayName: "Tuesday", enabled: true, start: "10:00", end: "14:00" },
@@ -36,6 +51,15 @@ const defaultAvailability: DoctorAvailabilityRow[] = [
 
 let portalTablesReadyPromise: Promise<void> | null = null;
 let portalTablesReady = false;
+
+function normalizeStatusValue(status: string) {
+  return status.trim().toLowerCase();
+}
+
+function isPendingStatus(status: string) {
+  const normalized = normalizeStatusValue(status);
+  return normalized === "confirmed" || normalized === "pending" || normalized === "booked";
+}
 
 function mapAppointmentRow(row: Record<string, unknown>): DoctorPortalAppointment {
   const status = String(row.status ?? "confirmed") as DoctorPortalAppointment["status"];
@@ -106,6 +130,36 @@ export async function ensureDoctorPortalTables() {
         );
       `;
 
+      await sql`
+        ALTER TABLE appointments
+        ADD COLUMN IF NOT EXISTS patient_id INTEGER;
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS appointments_doctor_id_idx
+        ON appointments (doctor_id);
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS appointments_patient_id_idx
+        ON appointments (patient_id);
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS appointments_date_idx
+        ON appointments (appointment_date);
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS appointments_doctor_name_date_idx
+        ON appointments (doctor_name, appointment_date);
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS appointments_doctor_name_status_date_idx
+        ON appointments (doctor_name, status, appointment_date);
+      `;
+
       portalTablesReady = true;
     })
     .then(() => undefined)
@@ -141,6 +195,226 @@ export async function listDoctorAppointmentsByName(doctorName: string) {
   `) as Array<Record<string, unknown>>;
 
   return rows.map((row) => mapAppointmentRow(row));
+}
+
+export async function listDoctorAppointmentsPage(input: {
+  doctorName: string;
+  filter: DoctorAppointmentFilter;
+  page: number;
+  pageSize: number;
+}): Promise<DoctorAppointmentsPageResult> {
+  if (!isNeonConfigured()) {
+    return {
+      appointments: [],
+      totalCount: 0,
+      totalPages: 1,
+      page: 1,
+      pageSize: input.pageSize,
+    };
+  }
+
+  await ensureDoctorPortalTables();
+  const sql = getSql();
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const page = Math.max(1, Math.trunc(input.page));
+  const pageSize = Math.max(1, Math.min(50, Math.trunc(input.pageSize)));
+  const offset = (page - 1) * pageSize;
+
+  let rows: Array<Record<string, unknown>> = [];
+  let countRows: Array<{ count: number }> = [];
+
+  if (input.filter === "today") {
+    rows = (await sql`
+      SELECT
+        id,
+        patient_name,
+        patient_phone,
+        symptoms,
+        appointment_date,
+        appointment_slot,
+        status,
+        notes,
+        created_at
+      FROM appointments
+      WHERE doctor_name = ${input.doctorName}
+        AND appointment_date = ${todayIso}
+        AND LOWER(status) IN ('confirmed', 'pending', 'booked')
+      ORDER BY appointment_slot ASC, id DESC
+      LIMIT ${pageSize}
+      OFFSET ${offset};
+    `) as Array<Record<string, unknown>>;
+
+    countRows = (await sql`
+      SELECT COUNT(*)::int AS count
+      FROM appointments
+      WHERE doctor_name = ${input.doctorName}
+        AND appointment_date = ${todayIso}
+        AND LOWER(status) IN ('confirmed', 'pending', 'booked');
+    `) as Array<{ count: number }>;
+  } else if (input.filter === "upcoming") {
+    rows = (await sql`
+      SELECT
+        id,
+        patient_name,
+        patient_phone,
+        symptoms,
+        appointment_date,
+        appointment_slot,
+        status,
+        notes,
+        created_at
+      FROM appointments
+      WHERE doctor_name = ${input.doctorName}
+        AND appointment_date >= ${todayIso}
+        AND LOWER(status) IN ('confirmed', 'pending', 'booked')
+      ORDER BY appointment_date ASC, appointment_slot ASC, id DESC
+      LIMIT ${pageSize}
+      OFFSET ${offset};
+    `) as Array<Record<string, unknown>>;
+
+    countRows = (await sql`
+      SELECT COUNT(*)::int AS count
+      FROM appointments
+      WHERE doctor_name = ${input.doctorName}
+        AND appointment_date >= ${todayIso}
+        AND LOWER(status) IN ('confirmed', 'pending', 'booked');
+    `) as Array<{ count: number }>;
+  } else if (input.filter === "completed") {
+    rows = (await sql`
+      SELECT
+        id,
+        patient_name,
+        patient_phone,
+        symptoms,
+        appointment_date,
+        appointment_slot,
+        status,
+        notes,
+        created_at
+      FROM appointments
+      WHERE doctor_name = ${input.doctorName}
+        AND LOWER(status) = 'completed'
+      ORDER BY appointment_date DESC, appointment_slot DESC, id DESC
+      LIMIT ${pageSize}
+      OFFSET ${offset};
+    `) as Array<Record<string, unknown>>;
+
+    countRows = (await sql`
+      SELECT COUNT(*)::int AS count
+      FROM appointments
+      WHERE doctor_name = ${input.doctorName}
+        AND LOWER(status) = 'completed';
+    `) as Array<{ count: number }>;
+  } else {
+    rows = (await sql`
+      SELECT
+        id,
+        patient_name,
+        patient_phone,
+        symptoms,
+        appointment_date,
+        appointment_slot,
+        status,
+        notes,
+        created_at
+      FROM appointments
+      WHERE doctor_name = ${input.doctorName}
+      ORDER BY appointment_date DESC, appointment_slot DESC, id DESC
+      LIMIT ${pageSize}
+      OFFSET ${offset};
+    `) as Array<Record<string, unknown>>;
+
+    countRows = (await sql`
+      SELECT COUNT(*)::int AS count
+      FROM appointments
+      WHERE doctor_name = ${input.doctorName};
+    `) as Array<{ count: number }>;
+  }
+
+  const appointments = rows
+    .map((row) => mapAppointmentRow(row))
+    .filter((appointment) => {
+      if (input.filter === "today") {
+        return appointment.dateIso === todayIso && isPendingStatus(appointment.status);
+      }
+
+      if (input.filter === "upcoming") {
+        return appointment.dateIso >= todayIso && isPendingStatus(appointment.status);
+      }
+
+      if (input.filter === "completed") {
+        return normalizeStatusValue(appointment.status) === "completed";
+      }
+
+      return true;
+    });
+
+  const totalCount = countRows[0]?.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  return {
+    appointments,
+    totalCount,
+    totalPages,
+    page,
+    pageSize,
+  };
+}
+
+export async function getDoctorDashboardSnapshot(doctorName: string): Promise<DoctorDashboardSnapshot> {
+  if (!isNeonConfigured()) {
+    return {
+      todayAppointments: [],
+      upcomingAppointments: [],
+    };
+  }
+
+  await ensureDoctorPortalTables();
+  const sql = getSql();
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const todayRows = (await sql`
+    SELECT
+      id,
+      patient_name,
+      patient_phone,
+      symptoms,
+      appointment_date,
+      appointment_slot,
+      status,
+      notes,
+      created_at
+    FROM appointments
+    WHERE doctor_name = ${doctorName}
+      AND appointment_date = ${todayIso}
+      AND LOWER(status) IN ('confirmed', 'pending', 'booked')
+    ORDER BY appointment_slot ASC, id DESC;
+  `) as Array<Record<string, unknown>>;
+
+  const upcomingRows = (await sql`
+    SELECT
+      id,
+      patient_name,
+      patient_phone,
+      symptoms,
+      appointment_date,
+      appointment_slot,
+      status,
+      notes,
+      created_at
+    FROM appointments
+    WHERE doctor_name = ${doctorName}
+      AND appointment_date > ${todayIso}
+      AND LOWER(status) <> 'cancelled'
+    ORDER BY appointment_date ASC, appointment_slot ASC, id DESC
+    LIMIT 4;
+  `) as Array<Record<string, unknown>>;
+
+  return {
+    todayAppointments: todayRows.map((row) => mapAppointmentRow(row)),
+    upcomingAppointments: upcomingRows.map((row) => mapAppointmentRow(row)),
+  };
 }
 
 export async function getDoctorAppointmentById(doctorName: string, appointmentId: number) {

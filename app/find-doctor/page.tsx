@@ -8,6 +8,8 @@ import { FindDoctorClient } from "@/app/find-doctor/find-doctor-client";
 
 const progressSteps = ["Find Doctor", "Schedule", "Patient", "Payment"];
 
+export const revalidate = 120;
+
 type FindDoctorPageProps = {
   searchParams?: Promise<{ specialty?: string; q?: string }>;
 };

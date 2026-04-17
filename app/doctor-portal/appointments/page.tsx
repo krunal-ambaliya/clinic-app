@@ -1,45 +1,18 @@
-"use client";
-
+import { Suspense } from "react";
+import { cookies } from "next/headers";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { notFound } from "next/navigation";
 import { CheckCircle2, FileText, Pencil, XCircle } from "lucide-react";
 
-type AppointmentFilter = "today" | "upcoming" | "completed";
+import { updateAppointmentStatusAction } from "@/app/doctor-portal/actions";
+import { AppointmentsFilterTabs, type AppointmentFilter } from "@/app/doctor-portal/appointments/appointments-filter-tabs";
+import { DownloadReceiptButton } from "@/app/doctor-portal/appointments/download-receipt-button";
+import { DOCTOR_SESSION_COOKIE, getDoctorUserByToken } from "@/lib/doctor-auth";
+import { formatPrettyDate, listDoctorAppointmentsPage } from "@/lib/doctor-portal-db";
 
-type DoctorPortalAppointment = {
-  id: number;
-  patientName: string;
-  phone: string;
-  symptoms: string;
-  dateIso: string;
-  time: string;
-  status: "confirmed" | "completed" | "cancelled";
-  notes: string;
+type DoctorAppointmentsPageProps = {
+  searchParams?: Promise<{ filter?: string; page?: string }>;
 };
-
-function formatPrettyDate(dateIso: string) {
-  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateIso);
-  let date: Date;
-
-  if (isoMatch) {
-    const year = Number(isoMatch[1]);
-    const month = Number(isoMatch[2]);
-    const day = Number(isoMatch[3]);
-    date = new Date(year, month - 1, day);
-  } else {
-    date = new Date(dateIso);
-  }
-
-  if (Number.isNaN(date.getTime())) {
-    return dateIso;
-  }
-
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
-}
 
 function statusClass(status: string) {
   if (status === "completed") {
@@ -53,132 +26,54 @@ function statusClass(status: string) {
   return "bg-[#e8f4f0] text-[#0f4f46]";
 }
 
-export default function DoctorAppointmentsPage() {
-  const [filter, setFilter] = useState<AppointmentFilter>("today");
-  const [appointments, setAppointments] = useState<DoctorPortalAppointment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadAppointments() {
-      setIsLoading(true);
-
-      try {
-        const response = await fetch(`/api/doctor-portal/appointments?filter=${filter}`);
-        const result = (await response.json()) as { appointments?: DoctorPortalAppointment[] };
-
-        if (!cancelled) {
-          setAppointments(result.appointments ?? []);
-        }
-      } catch {
-        if (!cancelled) {
-          setAppointments([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadAppointments();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [filter]);
-
-  const filteredAppointments = useMemo(() => {
-    return appointments;
-  }, [appointments]);
-
-  async function updateStatus(id: number, status: "completed" | "cancelled") {
-    await fetch("/api/doctor-portal/appointments", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ appointmentId: id, status }),
-    });
-
-    const response = await fetch(`/api/doctor-portal/appointments?filter=${filter}`);
-    const result = (await response.json()) as { appointments?: DoctorPortalAppointment[] };
-    setAppointments(result.appointments ?? []);
+function normalizeFilter(filter: string | undefined): AppointmentFilter {
+  if (filter === "upcoming" || filter === "completed") {
+    return filter;
   }
 
-  async function downloadReceipt(appointment: DoctorPortalAppointment) {
-    const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
+  return "today";
+}
 
-    const left = 48;
-    const right = 547;
-    let y = 58;
+function normalizePage(page: string | undefined) {
+  const parsed = Number(page ?? "1");
+  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : 1;
+}
 
-    doc.setFillColor(232, 244, 240);
-    doc.roundedRect(left - 14, y - 28, right - left + 28, 58, 10, 10, "F");
+function AppointmentsPageSkeleton() {
+  return (
+    <section className="rounded-2xl border border-[#dbe5e1] bg-white p-6 shadow-sm">
+      <div className="mb-5 h-20 animate-pulse rounded-xl bg-[#edf3f1]" />
+      <div className="space-y-3">
+        <div className="h-24 animate-pulse rounded-xl bg-[#f6f9f8]" />
+        <div className="h-24 animate-pulse rounded-xl bg-[#f6f9f8]" />
+        <div className="h-24 animate-pulse rounded-xl bg-[#f6f9f8]" />
+      </div>
+    </section>
+  );
+}
 
-    doc.setTextColor(18, 60, 53);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.text("Clinic Atelier", left, y);
+async function AppointmentsContent({ searchParams }: DoctorAppointmentsPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const filter = normalizeFilter(resolvedSearchParams?.filter);
+  const page = normalizePage(resolvedSearchParams?.page);
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    doc.text("Appointment Receipt", left, y + 18);
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(DOCTOR_SESSION_COOKIE)?.value ?? "";
+  const doctor = await getDoctorUserByToken(sessionToken);
 
-    const now = new Date();
-    const issuedAt = new Intl.DateTimeFormat("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(now);
-
-    y += 72;
-    doc.setDrawColor(206, 221, 216);
-    doc.line(left, y, right, y);
-    y += 24;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text("Receipt Details", left, y);
-    y += 18;
-
-    const rows: Array<[string, string]> = [
-      ["Receipt ID", `RCPT-${appointment.id}`],
-      ["Issued At", issuedAt],
-      ["Appointment Date", formatPrettyDate(appointment.dateIso)],
-      ["Appointment Time", appointment.time],
-      ["Patient Name", appointment.patientName],
-      ["Phone", appointment.phone],
-      ["Status", appointment.status.toUpperCase()],
-    ];
-
-    doc.setFontSize(11);
-    for (const [label, value] of rows) {
-      doc.setFont("helvetica", "bold");
-      doc.text(`${label}:`, left, y);
-      doc.setFont("helvetica", "normal");
-      doc.text(value, left + 132, y);
-      y += 20;
-    }
-
-    y += 8;
-    doc.setFont("helvetica", "bold");
-    doc.text("Symptoms:", left, y);
-    y += 16;
-    doc.setFont("helvetica", "normal");
-    const symptomsText = appointment.symptoms || "No symptoms recorded.";
-    const wrappedSymptoms = doc.splitTextToSize(symptomsText, right - left);
-    doc.text(wrappedSymptoms, left, y);
-    y += wrappedSymptoms.length * 14 + 10;
-
-    doc.setDrawColor(206, 221, 216);
-    doc.line(left, y, right, y);
-    y += 20;
-    doc.setFontSize(10);
-    doc.setTextColor(90, 112, 107);
-    doc.text("This is a system-generated receipt from Clinic Atelier Doctor Portal.", left, y);
-
-    doc.save(`appointment-receipt-${appointment.id}.pdf`);
+  if (!doctor) {
+    notFound();
   }
+
+  const result = await listDoctorAppointmentsPage({
+    doctorName: doctor.fullName,
+    filter,
+    page,
+    pageSize: 12,
+  });
+
+  const previousPage = Math.max(1, result.page - 1);
+  const nextPage = Math.min(result.totalPages, result.page + 1);
 
   return (
     <section className="rounded-2xl border border-[#dbe5e1] bg-white p-6 shadow-sm">
@@ -196,34 +91,13 @@ export default function DoctorAppointmentsPage() {
         </Link>
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-2">
-        {[
-          { label: "Today", value: "today" },
-          { label: "Upcoming", value: "upcoming" },
-          { label: "Completed", value: "completed" },
-        ].map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => setFilter(item.value as AppointmentFilter)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${
-              filter === item.value ? "bg-[#0c6a5f] text-white" : "bg-[#edf3f1] text-[#244641]"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <AppointmentsFilterTabs filter={filter} />
 
       <div className="mt-5 space-y-3">
-        {isLoading ? (
-          <p className="rounded-xl bg-[#f6f9f8] p-4 text-sm text-[#5e726d]">Loading appointments...</p>
-        ) : null}
-
-        {!isLoading && filteredAppointments.length === 0 ? (
+        {result.appointments.length === 0 ? (
           <p className="rounded-xl bg-[#f6f9f8] p-4 text-sm text-[#5e726d]">No appointments in this filter.</p>
         ) : (
-          filteredAppointments.map((appointment) => {
+          result.appointments.map((appointment) => {
             const currentStatus = appointment.status;
 
             return (
@@ -253,32 +127,32 @@ export default function DoctorAppointmentsPage() {
                         <FileText className="h-4 w-4" aria-hidden="true" />
                         View Report
                       </Link>
-                      <button
-                        type="button"
-                        onClick={() => downloadReceipt(appointment)}
-                        className="inline-flex items-center gap-2 rounded-lg bg-[#e6f4ec] px-3 py-2 text-xs font-semibold text-[#176844]"
-                      >
-                        Download Receipt
-                      </button>
+                      <DownloadReceiptButton appointment={appointment} />
                     </>
                   ) : (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => updateStatus(appointment.id, "completed")}
-                        className="inline-flex items-center gap-2 rounded-lg bg-[#e6f4ec] px-3 py-2 text-xs font-semibold text-[#176844]"
-                      >
-                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                        Mark as Completed
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateStatus(appointment.id, "cancelled")}
-                        className="inline-flex items-center gap-2 rounded-lg bg-[#f9ecec] px-3 py-2 text-xs font-semibold text-[#9e3d3d]"
-                      >
-                        <XCircle className="h-4 w-4" aria-hidden="true" />
-                        Cancel
-                      </button>
+                      <form action={updateAppointmentStatusAction}>
+                        <input type="hidden" name="appointmentId" value={appointment.id} />
+                        <input type="hidden" name="status" value="completed" />
+                        <button
+                          type="submit"
+                          className="inline-flex items-center gap-2 rounded-lg bg-[#e6f4ec] px-3 py-2 text-xs font-semibold text-[#176844]"
+                        >
+                          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                          Mark as Completed
+                        </button>
+                      </form>
+                      <form action={updateAppointmentStatusAction}>
+                        <input type="hidden" name="appointmentId" value={appointment.id} />
+                        <input type="hidden" name="status" value="cancelled" />
+                        <button
+                          type="submit"
+                          className="inline-flex items-center gap-2 rounded-lg bg-[#f9ecec] px-3 py-2 text-xs font-semibold text-[#9e3d3d]"
+                        >
+                          <XCircle className="h-4 w-4" aria-hidden="true" />
+                          Cancel
+                        </button>
+                      </form>
                       <Link
                         href={`/doctor-portal/appointments/${appointment.id}`}
                         className="inline-flex items-center gap-2 rounded-lg bg-[#edf3f1] px-3 py-2 text-xs font-semibold text-[#1f4a43]"
@@ -294,6 +168,36 @@ export default function DoctorAppointmentsPage() {
           })
         )}
       </div>
+
+      <div className="mt-6 flex items-center justify-between">
+        <p className="text-xs font-semibold text-[#5e726d]">
+          Showing page {result.page} of {result.totalPages} ({result.totalCount} total)
+        </p>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/doctor-portal/appointments?filter=${filter}&page=${previousPage}`}
+            className="rounded-lg bg-[#edf3f1] px-3 py-2 text-xs font-semibold text-[#1f4a43]"
+            aria-disabled={result.page <= 1}
+          >
+            Previous
+          </Link>
+          <Link
+            href={`/doctor-portal/appointments?filter=${filter}&page=${nextPage}`}
+            className="rounded-lg bg-[#edf3f1] px-3 py-2 text-xs font-semibold text-[#1f4a43]"
+            aria-disabled={result.page >= result.totalPages}
+          >
+            Next
+          </Link>
+        </div>
+      </div>
     </section>
+  );
+}
+
+export default function DoctorAppointmentsPage({ searchParams }: DoctorAppointmentsPageProps) {
+  return (
+    <Suspense fallback={<AppointmentsPageSkeleton />}>
+      <AppointmentsContent searchParams={searchParams} />
+    </Suspense>
   );
 }
