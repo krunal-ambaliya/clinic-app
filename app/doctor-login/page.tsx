@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function DoctorLoginPage() {
   const router = useRouter();
@@ -106,6 +107,13 @@ export default function DoctorLoginPage() {
           >
             {isSubmitting ? "Signing in..." : "Login to Portal"}
           </button>
+
+          <Link
+            href="/admin-login"
+            className="block text-center text-xs font-semibold text-[#365f58] underline decoration-[#9cb8b1] underline-offset-4 transition hover:text-[#1f4d45]"
+          >
+            Admin Login
+          </Link>
 
           {errorMessage ? <p className="text-sm font-semibold text-[#9e3d3d]">{errorMessage}</p> : null}
         </form>
