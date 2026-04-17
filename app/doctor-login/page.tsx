@@ -7,6 +7,7 @@ export default function DoctorLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -60,14 +61,42 @@ export default function DoctorLoginPage() {
 
           <label className="block text-sm font-semibold text-[#22423d]">
             Password
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-[#d6e0dc] bg-[#f7faf8] px-4 py-3 outline-none ring-[#0c6a5f] focus:ring-2"
-              placeholder="Enter password"
-              required
-            />
+            <div className="relative mt-2">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full rounded-xl border border-[#d6e0dc] bg-[#f7faf8] px-4 py-3 pr-12 outline-none ring-[#0c6a5f] focus:ring-2"
+                placeholder="Enter password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[#52736c] hover:text-[#21453f] focus:outline-none"
+              >
+                {showPassword ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M10.58 10.58a2 2 0 102.83 2.83M9.88 5.09A9.8 9.8 0 0112 4c5 0 8.27 4 9 8a13.24 13.24 0 01-2.23 4.36M6.1 6.1C3.97 7.58 2.59 9.64 2 12c.73 4 4 8 10 8 1.66 0 3.14-.31 4.45-.86"
+                    />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M2 12s3.5-8 10-8 10 8 10 8-3.5 8-10 8-10-8-10-8z"
+                    />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </label>
 
           <button
