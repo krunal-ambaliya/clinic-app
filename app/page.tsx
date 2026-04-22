@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -10,6 +11,40 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Find Top Doctors and Book Appointments Online",
+  description:
+    "Search specialists, compare availability, and book medical appointments online in minutes with Clinic Booking.",
+  keywords: [
+    "doctor appointment booking",
+    "find doctors online",
+    "clinic appointments",
+    "online medical booking",
+    "specialist consultation",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "Clinic Booking | Find Doctors and Book Appointments",
+    description:
+      "Book doctor appointments quickly with secure scheduling, specialist discovery, and instant confirmation.",
+    url: "/",
+    siteName: "Clinic Booking",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Clinic Booking | Find Doctors and Book Appointments",
+    description:
+      "Find trusted specialists and schedule appointments online with Clinic Booking.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
 
 const doctorAvatars = [
   "https://lh3.googleusercontent.com/aida-public/AB6AXuDZRI-uGGFFqEkMrDBiwK9bViVpUbN_4iZfK4yFyxshYSlBMPdq-x2DMwbj8ojNjqxeOK_R3P6yBue6QBEW1O2av4GfcUirYOuNJHseNNv4vyWD37G4hoTi1CRDCcSUVO3SIGbSzGOxkAcK2xGohCw1QpE0JN1nhAy9YtX27Pn9xu4GE7B5CR7A4P5BuBQ69yqM9oG2RpCl3oSmTFS4wXU5IClnaOynJSi0hAaXo3rwKm9PSmfRc3nL5IlDf5MHDa66-uBWXGraF-QY",
